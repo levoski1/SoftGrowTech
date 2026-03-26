@@ -1,0 +1,34 @@
+[
+    {
+        "ip": "197.211.63.168",
+        "fetched_at": "2026-03-26 17:41:41",
+        "country": "Nigeria",
+        "country_code": "NG",
+        "region": "Lagos",
+        "region_code": "LA",
+        "city": "Lagos",
+        "zip_code": "",
+        "latitude": 6.4474,
+        "longitude": 3.3903,
+        "timezone": "Africa/Lagos",
+        "isp": "Globacom Limited",
+        "org": "Glomobile Gprs",
+        "as_number": "AS328309 Globacom Limited"
+    },
+    {
+        "ip": "197.211.63.168",
+        "fetched_at": "2026-03-26 18:33:08",
+        "country": "Nigeria",
+        "country_code": "NG",
+        "region": "Lagos",
+        "region_code": "LA",
+        "city": "Lagos",
+        "zip_code": "",
+        "latitude": 6.4474,
+        "longitude": 3.3903,
+        "timezone": "Africa/Lagos",
+        "isp": "Globacom Limited",
+        "org": "Glomobile Gprs",
+        "as_number": "AS328309 Globacom Limited"
+    }
+]

@@ -1,0 +1,537 @@
+"""
+map_generator.py
+-----------------
+Generates a rich, standalone interactive HTML map for a geolocation result.
+
+WHY NOT FOLIUM?
+  Folium is excellent but requires pip install. This module generates
+  a fully self-contained HTML file using the Leaflet.js library (loaded
+  from a CDN), so no Python packages beyond `requests` are needed.
+
+LEAFLET.js:
+  The world's most popular open-source JavaScript mapping library.
+  Powers maps on GitHub, Mapbox, OpenStreetMap, and thousands of apps.
+  It is loaded from unpkg.com CDN — users need internet to VIEW the map,
+  but the HTML file itself works offline once saved with CDN fallbacks.
+
+OUTPUT:
+  A single .html file that opens in any browser and shows:
+  - An interactive map centred on the IP's coordinates
+  - A custom animated marker
+  - A rich info popup with all geolocation details
+  - A data panel sidebar
+  - Zoom controls and tile layer controls
+"""
+
+import os
+import json
+from datetime import datetime
+
+
+def generate_map(location: dict, output_path: str = "maps/geo_map.html") -> str:
+    """
+    Generate a standalone interactive HTML map for a geolocation result.
+
+    Args:
+        location    (dict): Geolocation data from geo_fetcher.lookup()
+        output_path (str):  Where to save the HTML file
+
+    Returns:
+        str: The absolute path to the generated HTML file
+    """
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    lat  = location["latitude"]
+    lon  = location["longitude"]
+    ip   = location["ip"]
+    city = location["city"]
+    country = location["country"]
+
+    # Build the popup HTML content (shown when the user clicks the marker)
+    popup_rows = [
+        ("🌐 IP Address",  location["ip"]),
+        ("🗺️ Country",     f"{location['country']} ({location['country_code']})"),
+        ("📍 Region",      location["region"]),
+        ("🏙️ City",        location["city"]),
+        ("📮 ZIP Code",    location["zip_code"]),
+        ("📡 ISP",         location["isp"]),
+        ("🏢 Organisation",location["org"]),
+        ("🕐 Timezone",    location["timezone"]),
+        ("📐 Coordinates", f"{lat:.4f}°, {lon:.4f}°"),
+        ("🕒 Fetched At",  location["fetched_at"]),
+    ]
+
+    popup_rows_html = "\n".join(
+        f"""
+        <tr>
+          <td class="popup-label">{label}</td>
+          <td class="popup-value">{value}</td>
+        </tr>"""
+        for label, value in popup_rows
+    )
+
+    # Sidebar panel data (shown in the fixed side panel)
+    panel_items = popup_rows  # reuse same data
+
+    panel_html = "\n".join(
+        f"""
+        <div class="panel-row">
+          <span class="panel-label">{label}</span>
+          <span class="panel-value">{value}</span>
+        </div>"""
+        for label, value in panel_items
+    )
+
+    # Escape for JS string safety
+    def js_str(s):
+        return str(s).replace("'", "\\'").replace('"', '\\"')
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GeoTracker — {js_str(ip)}</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    /* ── Reset & Base ───────────────────────────────────────── */
+    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+
+    :root {{
+      --bg-dark:    #0a0e1a;
+      --bg-panel:   #111827;
+      --bg-card:    #1a2236;
+      --border:     #1e3a5f;
+      --accent:     #00d4ff;
+      --accent2:    #7c3aed;
+      --text:       #e2e8f0;
+      --text-muted: #64748b;
+      --green:      #10b981;
+      --amber:      #f59e0b;
+      --font-mono:  'Courier New', monospace;
+    }}
+
+    html, body {{
+      height: 100%;
+      background: var(--bg-dark);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+    }}
+
+    /* ── Layout ─────────────────────────────────────────────── */
+    .app {{
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      grid-template-rows: 56px 1fr;
+      height: 100vh;
+    }}
+
+    /* ── Top Bar ────────────────────────────────────────────── */
+    .topbar {{
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 1000;
+    }}
+    .topbar-logo {{
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+    }}
+    .topbar-logo span {{ color: var(--text); }}
+    .topbar-ip {{
+      margin-left: auto;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--accent);
+      background: rgba(0,212,255,0.08);
+      border: 1px solid rgba(0,212,255,0.2);
+      padding: 4px 12px;
+      border-radius: 20px;
+    }}
+    .topbar-time {{
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }}
+    .status-dot {{
+      width: 8px; height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s infinite;
+    }}
+    @keyframes pulse {{
+      0%, 100% {{ opacity: 1; box-shadow: 0 0 8px var(--green); }}
+      50%       {{ opacity: 0.5; box-shadow: 0 0 20px var(--green); }}
+    }}
+
+    /* ── Side Panel ─────────────────────────────────────────── */
+    .side-panel {{
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+    }}
+    .panel-header {{
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: var(--bg-panel);
+      z-index: 10;
+    }}
+    .panel-header h2 {{
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }}
+    .location-title {{
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+    }}
+    .panel-body {{ padding: 12px 0; flex: 1; }}
+
+    .panel-row {{
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 10px 20px;
+      border-bottom: 1px solid rgba(30, 58, 95, 0.5);
+      transition: background 0.15s;
+    }}
+    .panel-row:hover {{ background: rgba(0,212,255,0.04); }}
+    .panel-row:last-child {{ border-bottom: none; }}
+    .panel-label {{
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }}
+    .panel-value {{
+      font-size: 0.85rem;
+      color: var(--text);
+      font-family: var(--font-mono);
+      word-break: break-all;
+    }}
+
+    .panel-coords {{
+      margin: 12px 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+    }}
+    .coords-label {{
+      font-size: 0.62rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }}
+    .coords-value {{
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }}
+
+    .panel-footer {{
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.6;
+    }}
+
+    /* ── Map Container ──────────────────────────────────────── */
+    #map {{
+      width: 100%;
+      height: 100%;
+      background: var(--bg-dark);
+    }}
+
+    /* ── Leaflet Popup Overrides ─────────────────────────────── */
+    .leaflet-popup-content-wrapper {{
+      background: var(--bg-panel) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 12px !important;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6) !important;
+      padding: 0 !important;
+      color: var(--text) !important;
+      overflow: hidden;
+    }}
+    .leaflet-popup-tip-container {{ display: none; }}
+    .leaflet-popup-content {{ margin: 0 !important; width: auto !important; }}
+
+    .popup-header {{
+      background: linear-gradient(135deg, #0a0e1a 0%, #1a2236 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 18px;
+    }}
+    .popup-title {{
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--accent);
+      font-family: var(--font-mono);
+    }}
+    .popup-subtitle {{
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }}
+    .popup-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }}
+    .popup-table tr:not(:last-child) {{
+      border-bottom: 1px solid rgba(30,58,95,0.5);
+    }}
+    .popup-label {{
+      padding: 7px 14px 7px 18px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      font-size: 0.72rem;
+      letter-spacing: 0.03em;
+    }}
+    .popup-value {{
+      padding: 7px 18px 7px 8px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      word-break: break-all;
+    }}
+
+    /* ── Custom Marker ───────────────────────────────────────── */
+    .pulse-marker {{
+      position: relative;
+      width: 20px;
+      height: 20px;
+    }}
+    .pulse-marker::before {{
+      content: '';
+      position: absolute;
+      inset: -10px;
+      border-radius: 50%;
+      background: rgba(0,212,255,0.2);
+      animation: ripple 2s infinite;
+    }}
+    .pulse-marker::after {{
+      content: '';
+      position: absolute;
+      inset: -20px;
+      border-radius: 50%;
+      background: rgba(0,212,255,0.08);
+      animation: ripple 2s infinite 0.5s;
+    }}
+    @keyframes ripple {{
+      0%   {{ transform: scale(0.5); opacity: 1; }}
+      100% {{ transform: scale(1.5); opacity: 0; }}
+    }}
+
+    /* ── Scrollbar ───────────────────────────────────────────── */
+    ::-webkit-scrollbar {{ width: 4px; }}
+    ::-webkit-scrollbar-track {{ background: transparent; }}
+    ::-webkit-scrollbar-thumb {{ background: var(--border); border-radius: 2px; }}
+  </style>
+</head>
+
+<body>
+<div class="app">
+
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="status-dot"></div>
+    <div class="topbar-logo">GEO<span>TRACKER</span></div>
+    <div class="topbar-ip">{ip}</div>
+    <div class="topbar-time">Fetched: {location['fetched_at']}</div>
+  </header>
+
+  <!-- Side Panel -->
+  <aside class="side-panel">
+    <div class="panel-header">
+      <h2>Location Details</h2>
+      <div class="location-title">{city}, {country}</div>
+    </div>
+
+    <div class="panel-coords">
+      <div class="coords-label">Coordinates</div>
+      <div class="coords-value">{lat:.4f}°, {lon:.4f}°</div>
+    </div>
+
+    <div class="panel-body">
+      {panel_html}
+    </div>
+
+    <div class="panel-footer">
+      Powered by ip-api.com &amp; Leaflet.js<br/>
+      Generated by GeoTracker · Python
+    </div>
+  </aside>
+
+  <!-- Map -->
+  <main>
+    <div id="map"></div>
+  </main>
+
+</div>
+
+<script>
+  // ── Leaflet Map Setup ──────────────────────────────────────────────────────
+  // L is the global Leaflet object loaded from the CDN script above.
+
+  // Create the map, centred on the IP's coordinates.
+  // zoom=13 is "neighbourhood" level. Valid range: 1 (world) → 19 (building)
+  const map = L.map('map', {{
+    center: [{lat}, {lon}],
+    zoom: 13,
+    zoomControl: false,        // We'll add custom positioned controls below
+    attributionControl: true,
+  }});
+
+  // Add zoom controls in bottom-right (default is top-left)
+  L.control.zoom({{ position: 'bottomright' }}).addTo(map);
+
+  // ── Tile Layers ───────────────────────────────────────────────────────────
+  // A "tile layer" is the background map image, composed of small square tiles.
+  // OpenStreetMap is free and open-source.
+  // CartoDB Dark Matter is a dark-theme tile set perfect for our UI.
+
+  const osmLayer = L.tileLayer(
+    'https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',
+    {{
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }}
+  );
+
+  const darkLayer = L.tileLayer(
+    'https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png',
+    {{
+      attribution: '&copy; CartoDB',
+      maxZoom: 19,
+      subdomains: 'abcd',
+    }},
+  );
+
+  // Use the dark theme by default (matches our UI)
+  darkLayer.addTo(map);
+
+  // Layer switcher control (top-right corner)
+  L.control.layers(
+    {{ 'Dark Theme': darkLayer, 'OpenStreetMap': osmLayer }},
+    {{}},
+    {{ position: 'topright' }}
+  ).addTo(map);
+
+  // ── Custom Animated Marker Icon ────────────────────────────────────────────
+  // L.divIcon() lets us use any HTML/CSS as the marker, instead of a PNG image.
+  // This gives us full control over the animated pulse effect.
+  const pulseIcon = L.divIcon({{
+    className: '',   // Remove Leaflet's default white box
+    html: `
+      <div style="
+        width:16px; height:16px;
+        background: #00d4ff;
+        border: 3px solid #fff;
+        border-radius: 50%;
+        box-shadow: 0 0 0 4px rgba(0,212,255,0.3),
+                    0 0 20px rgba(0,212,255,0.5);
+        position: relative;
+        animation: markerPop 0.4s cubic-bezier(0.34,1.56,0.64,1);
+      ">
+        <div style="
+          position:absolute; inset:-10px;
+          border-radius:50%;
+          background: rgba(0,212,255,0.15);
+          animation: markerRipple 2s infinite;
+        "></div>
+      </div>
+      <style>
+        @keyframes markerPop {{
+          from {{ transform:scale(0); opacity:0; }}
+          to   {{ transform:scale(1); opacity:1; }}
+        }}
+        @keyframes markerRipple {{
+          0%   {{ transform:scale(1);   opacity:0.8; }}
+          100% {{ transform:scale(2.5); opacity:0;   }}
+        }}
+      </style>
+    `,
+    iconSize:   [16, 16],
+    iconAnchor: [8, 8],    // Anchor point: centre of the icon
+    popupAnchor:[0, -16],  // Popup appears 16px above the icon
+  }});
+
+  // ── Popup Content ──────────────────────────────────────────────────────────
+  const popupContent = `
+    <div>
+      <div class="popup-header">
+        <div class="popup-title">{js_str(ip)}</div>
+        <div class="popup-subtitle">{js_str(city)}, {js_str(country)}</div>
+      </div>
+      <table class="popup-table">
+        {popup_rows_html}
+      </table>
+    </div>
+  `;
+
+  // Place the marker on the map at the IP's coordinates
+  const marker = L.marker([{lat}, {lon}], {{ icon: pulseIcon }})
+    .addTo(map)
+    .bindPopup(popupContent, {{
+      maxWidth: 400,
+      minWidth: 320,
+    }});
+
+  // Open the popup automatically after a short delay
+  // (gives the map tiles time to load first)
+  setTimeout(() => marker.openPopup(), 800);
+
+  // ── Accuracy Circle ────────────────────────────────────────────────────────
+  // IP geolocation is approximate. This circle visually represents the
+  // typical uncertainty radius for city-level IP geolocation (~5km).
+  L.circle([{lat}, {lon}], {{
+    color:       '#00d4ff',
+    fillColor:   '#00d4ff',
+    fillOpacity: 0.05,
+    weight:      1,
+    dashArray:   '5, 8',
+    radius:      5000,    // metres
+  }}).addTo(map);
+
+  // ── Scale Control ──────────────────────────────────────────────────────────
+  // Shows a scale bar (km / miles) in the bottom-left corner
+  L.control.scale({{ position: 'bottomleft', imperial: false }}).addTo(map);
+</script>
+</body>
+</html>
+"""
+
+    # Write the HTML file
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    abs_path = os.path.abspath(output_path)
+    return abs_path
