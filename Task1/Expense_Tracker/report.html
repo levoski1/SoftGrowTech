@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Expense Tracker Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-900">
+  <div class="min-h-screen">
+    <header class="bg-slate-900 text-white shadow">
+      <div class="max-w-7xl mx-auto px-4 py-5 sm:px-6 lg:px-8">
+        <h1 class="text-2xl sm:text-3xl font-bold">Personal Finance Dashboard</h1>
+        <p class="text-slate-300 text-sm mt-1">Generated at 2026-03-26 19:17:16</p>
+      </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <section class="bg-white rounded-xl shadow p-4 sm:p-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <div>
+            <label class="block text-sm font-medium text-slate-700">Category</label>
+            <select id="categoryFilter" class="mt-1 block w-full rounded-lg border-slate-300 focus:ring-indigo-500 focus:border-indigo-500">
+              <option value="">All categories</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700">Start date</label>
+            <input id="startDate" type="date" class="mt-1 block w-full rounded-lg border-slate-300 focus:ring-indigo-500 focus:border-indigo-500" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700">End date</label>
+            <input id="endDate" type="date" class="mt-1 block w-full rounded-lg border-slate-300 focus:ring-indigo-500 focus:border-indigo-500" />
+          </div>
+
+          <div class="flex gap-2">
+            <button id="applyFilters" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg">Apply</button>
+            <button id="resetFilters" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 font-medium py-2 px-4 rounded-lg">Reset</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <article class="bg-white rounded-xl shadow p-5">
+          <p class="text-sm text-slate-500">Total Income</p>
+          <p id="totalIncome" class="text-2xl font-bold text-emerald-600 mt-1">₦0.00</p>
+        </article>
+        <article class="bg-white rounded-xl shadow p-5">
+          <p class="text-sm text-slate-500">Total Expenses</p>
+          <p id="totalExpenses" class="text-2xl font-bold text-rose-600 mt-1">₦0.00</p>
+        </article>
+        <article class="bg-white rounded-xl shadow p-5">
+          <p class="text-sm text-slate-500">Balance</p>
+          <p id="balance" class="text-2xl font-bold text-indigo-600 mt-1">₦0.00</p>
+        </article>
+      </section>
+
+      <section class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <article class="bg-white rounded-xl shadow p-4">
+          <h2 class="text-lg font-semibold mb-3">Spending by Category</h2>
+          <div class="h-72">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </article>
+
+        <article class="bg-white rounded-xl shadow p-4">
+          <h2 class="text-lg font-semibold mb-3">Income vs Expenses (Monthly)</h2>
+          <div class="h-72">
+            <canvas id="monthlyChart"></canvas>
+          </div>
+        </article>
+      </section>
+
+      <section class="bg-white rounded-xl shadow">
+        <div class="px-4 py-4 border-b border-slate-200">
+          <h2 class="text-lg font-semibold">Transactions</h2>
+          <p id="txCount" class="text-sm text-slate-500">0 transaction(s)</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-50 text-slate-700">
+              <tr>
+                <th class="text-left font-semibold px-4 py-3">Date</th>
+                <th class="text-left font-semibold px-4 py-3">Type</th>
+                <th class="text-left font-semibold px-4 py-3">Category</th>
+                <th class="text-left font-semibold px-4 py-3">Description</th>
+                <th class="text-right font-semibold px-4 py-3">Amount</th>
+              </tr>
+            </thead>
+            <tbody id="txTableBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const allTransactions = [{"id": "ca8be72c", "date": "2026-03-26", "category": "Personal Care", "description": "i bought a laptop", "amount": 565.0, "type": "expense"}, {"id": "6ac1483e", "date": "2026-03-26", "category": "Travel", "description": "6", "amount": 100.0, "type": "expense"}, {"id": "460c9df8", "date": "2026-03-26", "category": "Entertainment", "description": "went to pool", "amount": 500.0, "type": "expense"}];
+    const naira = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' });
+
+    let categoryChart;
+    let monthlyChart;
+
+    const categoryFilterEl = document.getElementById('categoryFilter');
+    const startDateEl = document.getElementById('startDate');
+    const endDateEl = document.getElementById('endDate');
+
+    function uniqueCategories(data) {
+      return [...new Set(data.map(item => item.category).filter(Boolean))].sort();
+    }
+
+    function fillCategoryFilter() {
+      const categories = uniqueCategories(allTransactions);
+      for (const category of categories) {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        categoryFilterEl.appendChild(option);
+      }
+    }
+
+    function applyFilters(data) {
+      const selectedCategory = categoryFilterEl.value;
+      const startDate = startDateEl.value;
+      const endDate = endDateEl.value;
+
+      return data.filter(item => {
+        if (selectedCategory && item.category !== selectedCategory) return false;
+        if (startDate && item.date < startDate) return false;
+        if (endDate && item.date > endDate) return false;
+        return true;
+      });
+    }
+
+    function computeSummary(data) {
+      const income = data
+        .filter(item => item.type === 'income')
+        .reduce((sum, item) => sum + Number(item.amount), 0);
+
+      const expenses = data
+        .filter(item => item.type === 'expense')
+        .reduce((sum, item) => sum + Number(item.amount), 0);
+
+      return {
+        income,
+        expenses,
+        balance: income - expenses,
+      };
+    }
+
+    function computeCategoryTotals(data) {
+      const totals = {};
+      for (const item of data) {
+        if (item.type !== 'expense') continue;
+        totals[item.category] = (totals[item.category] || 0) + Number(item.amount);
+      }
+      return totals;
+    }
+
+    function computeMonthly(data) {
+      const monthly = {};
+
+      for (const item of data) {
+        const month = (item.date || '').slice(0, 7) || 'Unknown';
+        if (!monthly[month]) {
+          monthly[month] = { income: 0, expenses: 0 };
+        }
+
+        if (item.type === 'income') {
+          monthly[month].income += Number(item.amount);
+        } else {
+          monthly[month].expenses += Number(item.amount);
+        }
+      }
+
+      const labels = Object.keys(monthly).sort();
+      return {
+        labels,
+        incomeData: labels.map(month => monthly[month].income),
+        expenseData: labels.map(month => monthly[month].expenses),
+      };
+    }
+
+    function renderSummary(data) {
+      const summary = computeSummary(data);
+      document.getElementById('totalIncome').textContent = naira.format(summary.income);
+      document.getElementById('totalExpenses').textContent = naira.format(summary.expenses);
+
+      const balanceEl = document.getElementById('balance');
+      balanceEl.textContent = naira.format(summary.balance);
+      balanceEl.className = 'text-2xl font-bold mt-1 ' + (summary.balance >= 0 ? 'text-indigo-600' : 'text-rose-600');
+    }
+
+    function renderTable(data) {
+      const tbody = document.getElementById('txTableBody');
+      tbody.innerHTML = '';
+
+      if (!data.length) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="5" class="px-4 py-8 text-center text-slate-500">No transactions match the selected filters.</td>';
+        tbody.appendChild(row);
+      } else {
+        for (const item of data) {
+          const row = document.createElement('tr');
+          const typeClass = item.type === 'income' ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50';
+          row.innerHTML = `
+            <td class="px-4 py-3 whitespace-nowrap">${item.date || '-'}</td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${typeClass}">${item.type}</span>
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap">${item.category || '-'}</td>
+            <td class="px-4 py-3">${item.description || '-'}</td>
+            <td class="px-4 py-3 text-right font-medium">${naira.format(Number(item.amount) || 0)}</td>
+          `;
+          tbody.appendChild(row);
+        }
+      }
+
+      document.getElementById('txCount').textContent = `${data.length} transaction(s)`;
+    }
+
+    function renderCategoryChart(data) {
+      const totals = computeCategoryTotals(data);
+      const labels = Object.keys(totals);
+      const values = labels.map(label => totals[label]);
+
+      if (categoryChart) categoryChart.destroy();
+      categoryChart = new Chart(document.getElementById('categoryChart'), {
+        type: 'pie',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom' },
+          },
+        },
+      });
+    }
+              data: monthly.incomeData,
+      const monthly = computeMonthly(data);
+
+      if (monthlyChart) monthlyChart.destroy();
+              data: monthly.expenseData,
+        data: {
+          labels: monthly.labels,
+          datasets: [
+            {
+              label: 'Income',
+              data: monthly.incomeData,
+              backgroundColor: '#059669',
+            },
+            {
+              label: 'Expenses',
+              data: monthly.expenseData,
+              backgroundColor: '#DC2626',
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+            },
+          },
+        },
+      });
+    }
+
+    function renderDashboard() {
+      const filtered = applyFilters(allTransactions);
+      renderSummary(filtered);
+      renderTable(filtered);
+      renderCategoryChart(filtered);
+      renderMonthlyChart(filtered);
+    }
+
+    document.getElementById('applyFilters').addEventListener('click', renderDashboard);
+    document.getElementById('resetFilters').addEventListener('click', () => {
+      categoryFilterEl.value = '';
+      startDateEl.value = '';
+      endDateEl.value = '';
+      renderDashboard();
+    });
+
+    fillCategoryFilter();
+    renderDashboard();
+  </script>
+</body>
+</html>

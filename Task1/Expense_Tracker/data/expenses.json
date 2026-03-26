@@ -6,5 +6,21 @@
         "description": "i bought a laptop",
         "date": "2026-03-26",
         "created_at": "2026-03-26T10:13:32.878635"
+    },
+    {
+        "id": "6ac1483e",
+        "amount": 100.0,
+        "category": "Travel",
+        "description": "6",
+        "date": "2026-03-26",
+        "created_at": "2026-03-26T19:00:43.916847"
+    },
+    {
+        "id": "460c9df8",
+        "amount": 500.0,
+        "category": "Entertainment",
+        "description": "went to pool",
+        "date": "2026-03-26",
+        "created_at": "2026-03-26T19:14:32.385106"
     }
 ]

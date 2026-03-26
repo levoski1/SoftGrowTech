@@ -14,6 +14,9 @@ import os
 from datetime import datetime
 from expense_tracker import get_all_expenses, filter_expenses
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
 
 def export_to_csv(
     filename: str = None,
@@ -39,8 +42,8 @@ def export_to_csv(
         filename = f"expenses_export_{timestamp}.csv"
 
     # Ensure the output file goes to the data/ directory
-    filepath = os.path.join("data", filename)
-    os.makedirs("data", exist_ok=True)
+    filepath = os.path.join(DATA_DIR, filename)
+    os.makedirs(DATA_DIR, exist_ok=True)
 
     # Fetch the relevant expenses
     if any([category, month, year]):

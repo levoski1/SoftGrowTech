@@ -19,7 +19,8 @@ from datetime import datetime   # For timestamping expenses
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
 # Keeping magic values as constants makes them easy to find and update
 
-DATA_FILE = "data/expenses.json"   # Where all expense data is stored
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_FILE = os.path.join(BASE_DIR, "data", "expenses.json")   # Where all expense data is stored
 
 # Valid categories the user can choose from
 CATEGORIES = [

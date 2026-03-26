@@ -38,6 +38,7 @@ from display import (
 )
 from validators import validate_amount, validate_date, validate_description
 from export import export_to_csv
+from dashboard import generate_dashboard_report
 
 
 # ─── MAIN MENU ────────────────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ MAIN_MENU = [
     "🗑️   Delete Expense",
     "📊  Analytics & Reports",
     "💾  Export to CSV",
+    "🌐  Open Dashboard",
     "❌  Exit",
 ]
 
@@ -414,6 +416,14 @@ def export_flow() -> None:
     success(f"Exported to: {os.path.abspath(filepath)}")
 
 
+def dashboard_flow() -> None:
+    """Generate and open a modern HTML dashboard from current data."""
+    print(header("Open Dashboard"))
+    info("Generating interactive HTML report...")
+    report_path = generate_dashboard_report(output_path="report.html", open_browser=True)
+    success(f"Dashboard ready: {report_path}")
+
+
 # ─── MAIN LOOP ────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -438,6 +448,7 @@ def main() -> None:
         4: delete_expense_flow,
         5: analytics_flow,
         6: export_flow,
+        7: dashboard_flow,
     }
 
     while True:
